@@ -63,7 +63,10 @@ class AlpacaBroker:
 
     def get_account(self) -> Account:
         a = self.client.get_account()
-        return Account(float(a.equity), float(a.last_equity), float(a.buying_power))
+        # Alpaca's buying_power includes margin (up to 4x equity). This bot never
+        # borrows, so it may only spend the cash it actually has.
+        spendable = max(0.0, min(float(a.buying_power), float(a.cash)))
+        return Account(float(a.equity), float(a.last_equity), spendable)
 
     def get_positions(self) -> dict[str, Position]:
         return {
