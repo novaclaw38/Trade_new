@@ -81,7 +81,8 @@ class Dashboard:
                 out.append({"symbol": symbol, "action": "ERROR", "reasons": [f"{type(e).__name__}: {e}"]})
         return out
 
-    def journal(self, last: int = 100) -> list[dict]:
+    def journal(self, last=100) -> list[dict]:
+        last = max(1, min(int(last), 1000))  # a bad value raises ValueError -> HTTP 400
         return Journal(self.cfg.log_dir).events(last=last)
 
     def backtest(self, symbol: str, years: int, cash: float) -> dict:
@@ -184,7 +185,7 @@ def make_handler(dash: Dashboard, port: int):
             elif url.path == "/api/signals":
                 self._call(dash.signals)
             elif url.path == "/api/journal":
-                self._call(dash.journal, min(int(q.get("last", 100)), 1000))
+                self._call(dash.journal, q.get("last", 100))
             elif url.path == "/api/backtest":
                 self._call(dash.backtest, q.get("symbol", dash.cfg.symbols[0]),
                            q.get("years", 5), q.get("cash", 10_000))

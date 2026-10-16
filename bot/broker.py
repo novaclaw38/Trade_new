@@ -97,6 +97,8 @@ class AlpacaBroker:
 
         after = datetime.fromisoformat(start).replace(tzinfo=timezone.utc)
         orders = self.client.get_orders(GetOrdersRequest(status=QueryOrderStatus.CLOSED, after=after, limit=500))
+        if len(orders) == 500:
+            log.warning("500 or more closed orders since %s; the scorecard's trade count may be low.", start)
         counts = {"buy": 0, "sell": 0}
         for o in orders:
             if o.filled_at is not None and o.side.value in counts:

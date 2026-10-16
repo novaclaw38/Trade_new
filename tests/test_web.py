@@ -102,6 +102,9 @@ def test_http_page_and_api(server, dash):
     status, body = request(server, "GET", "/api/status")
     assert status == 200 and json.loads(body)["equity"] == 50_000
     assert request(server, "GET", "/api/backtest?symbol=TSLA")[0] == 400
+    assert request(server, "GET", "/api/journal?last=abc")[0] == 400
+    status, body = request(server, "GET", "/api/journal?last=-5")
+    assert status == 200 and len(json.loads(body)) == 1
 
 
 def test_http_rejects_foreign_host(server):
