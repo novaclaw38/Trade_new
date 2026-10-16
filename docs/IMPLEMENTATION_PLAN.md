@@ -183,15 +183,13 @@ Tell the user, per step, what passed and what didn't, with the actual output
 2. **GitHub Actions CI** running `pytest` on every push.
 3. ✅ **`python -m bot check`** (done 2026-10-16): tests the Alpaca account,
    market data, news and one Groq call; places no orders. All four passed.
-4. 🟡 **Scheduling** (in progress): `scripts/scheduled_run.sh` runs one cycle
-   on a fresh machine and keeps `data/` on the `bot-data` branch. It checks
-   push access first and refuses to trade if state can't be saved. A cloud
-   Routine ("Trade bot daily paper run", weekdays 9:52 New York time) exists
-   but is **disabled**: its test run cloned and ran fine, but the push to
-   `bot-data` was refused (403) because the repo isn't in the Routine's
-   sources. Fix that (or run the script via cron on the user's machine),
-   then re-enable.
-
+4. ✅ **Scheduling** (working 2026-10-16): `scripts/scheduled_run.sh` runs one
+   cycle on a fresh machine and keeps `data/` on the `bot-data` branch. It
+   checks push access first and refuses to trade if state can't be saved.
+   Cloud Routine "Trade bot daily paper run" fires weekdays 9:52 New York time,
+   with the repo attached. A manual test run pushed to `bot-data` successfully.
+   First real run: Monday 2026-10-19, which also covers Step 5 (a cycle during
+   market hours). To halt new trades, add a `STOP` file to `bot-data`.
 5. ✅ **Local web dashboard** (done 2026-10-16): `python -m bot web`
    (`bot/web.py`, `bot/web_page.html`). Read-only plus the kill switch;
    localhost only, Host-header check, custom header required for writes.
