@@ -99,6 +99,12 @@ def run_backtest(
         "trades": trades,
         "win_rate": len(wins) / len(trades) if trades else 0.0,
         "still_open": symbol in broker.get_positions(),
+        # Daily [date, strategy equity, buy & hold equity] for charts.
+        "curve": [
+            [str(pd.Timestamp(t).date()), round(float(e), 2),
+             round(starting_cash * float(c) / float(bars["open"].iloc[0]), 2)]
+            for t, e, c in zip(ind.index, equity, ind["close"])
+        ],
     }
 
 

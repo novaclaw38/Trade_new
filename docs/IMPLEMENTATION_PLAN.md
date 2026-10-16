@@ -192,6 +192,10 @@ Tell the user, per step, what passed and what didn't, with the actual output
    sources. Fix that (or run the script via cron on the user's machine),
    then re-enable.
 
+5. ✅ **Local web dashboard** (done 2026-10-16): `python -m bot web`
+   (`bot/web.py`, `bot/web_page.html`). Read-only plus the kill switch;
+   localhost only, Host-header check, custom header required for writes.
+
 ## 5. Known gotchas
 
 * Cloud containers are ephemeral: `data/state.json` and logs vanish when the
