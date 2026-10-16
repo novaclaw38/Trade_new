@@ -1,18 +1,19 @@
 """Optional AI confirmation layer (OFF by default: AI_CONFIRMATION_ENABLED=false).
 
-What it does: when the rules produce a BUY, it shows Claude the last ~48h of
-news headlines for the symbol and asks one question: "is there clearly
-negative news that makes opening a new long position imprudent right now?"
+What it does: when the rules produce a BUY, it shows an LLM (served by Groq,
+https://groq.com) the last ~48h of news headlines for the symbol and asks one
+question: "is there clearly negative news that makes opening a new long
+position imprudent right now?"
 
 Design choices that keep this explainable and safe:
 * It can only VETO a trade, never create, enlarge or hold one. The worst a
   bad answer (or a malicious headline) can do is make the bot skip a trade.
 * It returns a short written reason, which is logged with every decision.
-* If it is enabled but anything goes wrong (no API key, network error, the
-  model declines to answer), the trade is skipped. Uncertainty => no trade.
+* If it is enabled but anything goes wrong (no API key, network error,
+  malformed answer), the trade is skipped. Uncertainty => no trade.
 * No headlines is not treated as bad news: the rules-based signal stands.
 
-Uses the official `anthropic` Python SDK. Set ANTHROPIC_API_KEY in `.env`.
+Uses the official `groq` Python SDK. Set GROQ_API_KEY in `.env`.
 """
 from __future__ import annotations
 
@@ -53,9 +54,9 @@ class Verdict:
 class AIConfirmation:
     def __init__(self, model: str, headlines_fn: Callable[[str], list[str]], client=None):
         if client is None:
-            import anthropic
+            from groq import Groq
 
-            client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from the environment
+            client = Groq()  # reads GROQ_API_KEY from the environment
         self.client = client
         self.model = model
         self.headlines_fn = headlines_fn
@@ -73,21 +74,23 @@ class AIConfirmation:
             + "\n".join(f"- {h}" for h in headlines[:15])
         )
         try:
-            response = self.client.beta.messages.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
-                max_tokens=4000,
-                system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
-                output_config={"effort": "low", "format": {"type": "json_schema", "schema": VERDICT_SCHEMA}},
-                # If the model declines, the API retries on a fallback model server-side.
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0,
+                # Strict mode: Groq guarantees the reply matches VERDICT_SCHEMA.
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": "trade_verdict", "strict": True, "schema": VERDICT_SCHEMA},
+                },
             )
-            if response.stop_reason == "refusal":
-                return Verdict(False, "AI reviewer declined to answer; skipping trade to be safe.")
-            text = next(b.text for b in response.content if b.type == "text")
-            data = json.loads(text)
-            return Verdict(data["verdict"] == "allow", str(data["reason"]))
+            data = json.loads(response.choices[0].message.content or "")
+            if data.get("verdict") not in ("allow", "veto"):
+                raise ValueError(f"unexpected verdict {data.get('verdict')!r}")
+            return Verdict(data["verdict"] == "allow", str(data.get("reason", "")))
         except Exception as e:  # noqa: BLE001
             log.warning("AI confirmation failed: %s", e)
             return Verdict(False, f"AI confirmation failed ({type(e).__name__}); skipping trade to be safe.")

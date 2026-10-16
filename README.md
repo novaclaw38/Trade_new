@@ -1,4 +1,4 @@
-# Simple Trading Bot
+# Trade_new: a simple trading bot
 
 A small, conservative trading bot for beginners. It trades a broad stock-market
 ETF (SPY by default) using one well-known trend-following rule, with risk
@@ -23,7 +23,7 @@ default**, which means simulated money in a broker sandbox.
 | `bot/data.py` | **Market data** from Alpaca (daily bars, latest price, news headlines). |
 | `bot/broker.py` | **Order execution and positions** via Alpaca, plus an in-memory broker for tests. |
 | `bot/engine.py` | Runs one cycle: data → signal → (optional AI veto) → risk check → order → log. |
-| `bot/ai_filter.py` | Optional Claude news check that can only **veto** a buy. Off by default. |
+| `bot/ai_filter.py` | Optional Groq-powered news check that can only **veto** a buy. Off by default. |
 | `bot/dashboard.py` | The text dashboard: equity, P&L, positions, signals, recent trades. |
 | `bot/journal.py` | Audit log of every signal, decision and order. |
 | `bot/backtest.py` | Replays history through the same rules. |
@@ -33,7 +33,7 @@ default**, which means simulated money in a broker sandbox.
 **Stack:** Python 3.10+, [`alpaca-py`](https://github.com/alpacahq/alpaca-py)
 (the [Alpaca](https://alpaca.markets) broker and market-data API, which has a
 free paper-trading sandbox), `pandas`, `python-dotenv`, `pytest`, and
-optionally `anthropic` (Claude) for the AI layer.
+optionally `groq` (the [Groq API](https://console.groq.com)) for the AI layer.
 
 ---
 
@@ -45,7 +45,7 @@ optionally `anthropic` (Claude) for the AI layer.
    Paper keys only work with fake money, which is what you want.
 3. **Install the bot:**
    ```bash
-   cd simple-trading-bot
+   cd Trade_new
    python -m venv .venv
    source .venv/bin/activate          # Windows: .venv\Scripts\activate
    pip install -r requirements.txt
@@ -160,16 +160,20 @@ If it finds one of those positions with no stop-loss on record (for example,
 you bought SPY by hand, or deleted `data/state.json`), it **closes** that
 position rather than leave it unprotected. Use a dedicated paper account.
 
-## Optional AI confirmation (Claude)
+## Optional AI confirmation (Groq)
 
-Off by default. When you set `AI_CONFIRMATION_ENABLED=true` (and add an
-`ANTHROPIC_API_KEY`), every BUY signal is first shown to Claude together with
-the last 48 hours of news headlines for that symbol (from Alpaca's news API).
-Claude answers "allow" or "veto" with a one-sentence reason, which goes into
-the log.
+Off by default. When you set `AI_CONFIRMATION_ENABLED=true` and add a
+`GROQ_API_KEY` (free to create at [console.groq.com/keys](https://console.groq.com/keys)),
+every BUY signal is first shown to an LLM running on [Groq](https://groq.com)
+(`openai/gpt-oss-20b` by default, set with `GROQ_MODEL`) together with the last
+48 hours of news headlines for that symbol (from Alpaca's news API). The model
+answers "allow" or "veto" with a one-sentence reason, which goes into the log.
+The answer is forced into a fixed JSON format using Groq's strict structured
+outputs, so if you change `GROQ_MODEL`, pick one Groq lists as supporting
+structured outputs.
 
 * It can **only veto** a trade. It never creates, enlarges or holds one.
-* If the AI call fails or the model won't answer, the trade is **skipped**.
+* If the AI call fails or the answer is malformed, the trade is **skipped**.
 * No recent headlines → the rules-based signal stands on its own.
 
 This adds a small cost per BUY signal (a few per year on daily bars).
