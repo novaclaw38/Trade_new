@@ -38,6 +38,7 @@ class Config:
     loop_minutes: int
     data_dir: Path
     kill_switch_file: Path
+    benchmark_symbol: str = "SPY"   # what the scorecard compares the bot against
 
     @property
     def is_live(self) -> bool:
@@ -126,4 +127,5 @@ def load_config(env_file: str | os.PathLike | None = ".env", require_keys: bool 
         loop_minutes=max(1, _num("LOOP_MINUTES", "15", int)),
         data_dir=data_dir,
         kill_switch_file=Path(_get("KILL_SWITCH_FILE", "STOP")),
+        benchmark_symbol=_get("BENCHMARK_SYMBOL", "SPY").upper() or "SPY",
     )

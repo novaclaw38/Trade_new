@@ -60,6 +60,12 @@ optionally `groq` (the [Groq API](https://console.groq.com)) for the AI layer.
    ```bash
    pytest
    ```
+6. **Check your keys** against the real services (places no orders):
+   ```bash
+   python -m bot check
+   ```
+   Each line shows OK, FAIL (with the error) or SKIP. Groq is skipped unless
+   `GROQ_API_KEY` is set. The command exits with code 1 if any check fails.
 
 ## Running in paper mode
 
@@ -102,6 +108,31 @@ Example dashboard:
    2026-10-02T14:05  BUY      17 SPY    @ 581.2
 ========================================================================
 ```
+
+### Web dashboard
+
+```bash
+python -m bot web             # then open http://127.0.0.1:8765
+```
+
+A local page with the account, positions, live signals, the activity journal
+and a backtest with an equity chart. At the top, a **scorecard** compares the
+account's real equity since it started with what the same money would be
+worth in SPY (set `BENCHMARK_SYMBOL` to change it), alongside the worst drop of
+each and progress toward 90 days of paper trading. It reads the account
+history from Alpaca, so it includes runs made in the cloud. It refreshes every 30 seconds. It never
+places or closes orders. Its only control is the kill switch button, which can
+only stop new trades. It listens on your own machine (127.0.0.1) only. Run it
+in a second terminal next to `python -m bot run --loop`.
+
+### Scheduled runs on a short-lived machine
+
+`scripts/scheduled_run.sh` runs one cycle on a machine that starts fresh each
+time, such as a scheduled cloud job. The bot's memory (`state.json` and
+`logs/`) is kept on a separate git branch, `bot-data`. The script checks that
+branch out into `.bot-data/`, runs `python -m bot run` with `DATA_DIR` pointing
+there, then commits and pushes the result. To halt new trades between runs, add
+a file named `STOP` to the `bot-data` branch.
 
 ### Stopping the bot
 

@@ -3,6 +3,8 @@
     python -m bot run            # one cycle (good for cron / Task Scheduler)
     python -m bot run --loop     # keep running, one cycle every LOOP_MINUTES
     python -m bot status         # dashboard only, no trading
+    python -m bot check          # test API keys / connections, no trading
+    python -m bot web            # local web dashboard at http://127.0.0.1:8765
     python -m bot backtest       # replay history through the strategy
 """
 from __future__ import annotations
@@ -103,6 +105,32 @@ def cmd_backtest(cfg: Config, args) -> None:
     print(format_report(run_backtest(bars, args.symbol, cfg.strategy, cfg.risk, args.cash)))
 
 
+def cmd_check(cfg: Config) -> None:
+    from bot.ai_filter import AIConfirmation
+    from bot.broker import AlpacaBroker
+    from bot.check import FAIL, format_results, run_checks
+    from bot.data import AlpacaData
+
+    broker = AlpacaBroker(cfg.alpaca_api_key, cfg.alpaca_secret_key, paper=not cfg.is_live)
+    data = AlpacaData(cfg.alpaca_api_key, cfg.alpaca_secret_key, cfg.timeframe, cfg.data_feed)
+    results = run_checks(cfg, broker, data, lambda: AIConfirmation(cfg.ai_model, data.recent_headlines))
+    print(format_results(results))
+    if any(r.status == FAIL for r in results):
+        sys.exit(1)
+
+
+def cmd_web(cfg: Config, args) -> None:
+    from bot.broker import AlpacaBroker
+    from bot.data import AlpacaData
+    from bot.journal import setup_logging
+    from bot.web import Dashboard, serve
+
+    setup_logging(cfg.log_dir, args.verbose)
+    broker = AlpacaBroker(cfg.alpaca_api_key, cfg.alpaca_secret_key, paper=not cfg.is_live)
+    data = AlpacaData(cfg.alpaca_api_key, cfg.alpaca_secret_key, cfg.timeframe, cfg.data_feed)
+    serve(Dashboard(cfg, broker, data), args.port)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m bot", description="Simple, conservative trading bot.")
     parser.add_argument("--env-file", default=".env")
@@ -111,6 +139,9 @@ def main(argv: list[str] | None = None) -> None:
     run = sub.add_parser("run", help="run one trading cycle (or --loop)")
     run.add_argument("--loop", action="store_true")
     sub.add_parser("status", help="show the dashboard without trading")
+    sub.add_parser("check", help="test the Alpaca and Groq connections; places no orders")
+    web = sub.add_parser("web", help="local web dashboard (read-only, plus a kill switch)")
+    web.add_argument("--port", type=int, default=8765)
     bt = sub.add_parser("backtest", help="replay history through the strategy")
     bt.add_argument("--symbol", default=None, help="defaults to the first symbol in SYMBOLS")
     bt.add_argument("--years", type=int, default=5)
@@ -127,6 +158,10 @@ def main(argv: list[str] | None = None) -> None:
         cmd_run(cfg, args)
     elif args.command == "status":
         show(cfg, build_engine(cfg, args.verbose))
+    elif args.command == "check":
+        cmd_check(cfg)
+    elif args.command == "web":
+        cmd_web(cfg, args)
     else:
         args.symbol = (args.symbol or cfg.symbols[0]).upper()
         cmd_backtest(cfg, args)
