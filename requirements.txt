@@ -1,0 +1,5 @@
+alpaca-py==0.44.0       # Alpaca broker + market data SDK
+pandas==3.0.6           # indicator math
+python-dotenv==1.2.4    # loads .env
+anthropic==1.15.0       # optional AI confirmation layer (Claude)
+pytest==9.1.1           # tests
