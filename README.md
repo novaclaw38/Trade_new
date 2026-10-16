@@ -60,6 +60,12 @@ optionally `groq` (the [Groq API](https://console.groq.com)) for the AI layer.
    ```bash
    pytest
    ```
+6. **Check your keys** against the real services (places no orders):
+   ```bash
+   python -m bot check
+   ```
+   Each line shows OK, FAIL (with the error) or SKIP. Groq is skipped unless
+   `GROQ_API_KEY` is set. The command exits with code 1 if any check fails.
 
 ## Running in paper mode
 

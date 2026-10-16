@@ -69,28 +69,32 @@ class AIConfirmation:
         if not headlines:
             return Verdict(True, "No recent headlines; relying on the rules-based signal.")
 
+        try:
+            return self.ask(symbol, signal_summary, headlines)
+        except Exception as e:  # noqa: BLE001
+            log.warning("AI confirmation failed: %s", e)
+            return Verdict(False, f"AI confirmation failed ({type(e).__name__}); skipping trade to be safe.")
+
+    def ask(self, symbol: str, signal_summary: str, headlines: list[str]) -> Verdict:
+        """One model call. Raises on any failure; `review` turns that into a veto."""
         prompt = (
             f"Symbol: {symbol}\nSignal: {signal_summary}\n\nRecent headlines:\n"
             + "\n".join(f"- {h}" for h in headlines[:15])
         )
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0,
-                # Strict mode: Groq guarantees the reply matches VERDICT_SCHEMA.
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {"name": "trade_verdict", "strict": True, "schema": VERDICT_SCHEMA},
-                },
-            )
-            data = json.loads(response.choices[0].message.content or "")
-            if data.get("verdict") not in ("allow", "veto"):
-                raise ValueError(f"unexpected verdict {data.get('verdict')!r}")
-            return Verdict(data["verdict"] == "allow", str(data.get("reason", "")))
-        except Exception as e:  # noqa: BLE001
-            log.warning("AI confirmation failed: %s", e)
-            return Verdict(False, f"AI confirmation failed ({type(e).__name__}); skipping trade to be safe.")
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0,
+            # Strict mode: Groq guarantees the reply matches VERDICT_SCHEMA.
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": "trade_verdict", "strict": True, "schema": VERDICT_SCHEMA},
+            },
+        )
+        data = json.loads(response.choices[0].message.content or "")
+        if data.get("verdict") not in ("allow", "veto"):
+            raise ValueError(f"unexpected verdict {data.get('verdict')!r}")
+        return Verdict(data["verdict"] == "allow", str(data.get("reason", "")))
