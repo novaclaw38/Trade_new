@@ -36,6 +36,15 @@ if [ ! -d "$WORKTREE" ]; then
   fi
 fi
 
+# If the result can't be saved, the next run would start without its recorded
+# stops and close any open position. Uncertainty means no trade: check push
+# access before trading.
+if git -C "$WORKTREE" rev-parse -q --verify HEAD >/dev/null \
+   && ! git -C "$WORKTREE" push -q --dry-run origin "HEAD:refs/heads/$DATA_BRANCH"; then
+  echo "Cannot push to $DATA_BRANCH, so the run's state could not be saved. Not trading." >&2
+  exit 2
+fi
+
 status=0
 DATA_DIR="$WORKTREE/data" KILL_SWITCH_FILE="$WORKTREE/STOP" python -m bot -v run || status=$?
 

@@ -181,11 +181,16 @@ Tell the user, per step, what passed and what didn't, with the actual output
 1. **SessionStart hook** so cloud sessions auto-install `requirements.txt`
    (see the `session-start-hook` skill).
 2. **GitHub Actions CI** running `pytest` on every push.
-3. **`python -m bot check` command** that bundles steps 2–3 into one
-   connectivity self-test.
-4. **Scheduling:** run `python -m bot run` once a day ~10:00 New York time
-   (cron / Task Scheduler on the user's machine; the cloud container is
-   ephemeral and not suitable for unattended trading).
+3. ✅ **`python -m bot check`** (done 2026-10-16): tests the Alpaca account,
+   market data, news and one Groq call; places no orders. All four passed.
+4. 🟡 **Scheduling** (in progress): `scripts/scheduled_run.sh` runs one cycle
+   on a fresh machine and keeps `data/` on the `bot-data` branch. It checks
+   push access first and refuses to trade if state can't be saved. A cloud
+   Routine ("Trade bot daily paper run", weekdays 9:52 New York time) exists
+   but is **disabled**: its test run cloned and ran fine, but the push to
+   `bot-data` was refused (403) because the repo isn't in the Routine's
+   sources. Fix that (or run the script via cron on the user's machine),
+   then re-enable.
 
 ## 5. Known gotchas
 
