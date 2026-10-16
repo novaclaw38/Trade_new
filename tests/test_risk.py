@@ -124,3 +124,24 @@ def test_kill_switch_blocks_entries():
 def test_max_open_positions_blocks_entries():
     d = make_rm(max_open_positions=2).approve_entry(equity=1e5, buying_power=1e5, entry=100, stop=95, open_positions=2)
     assert not d.approved
+
+
+# --- No leverage: margin buying power is never used ----------------------------
+def _alpaca_with_account(**fields):
+    from types import SimpleNamespace
+
+    from bot.broker import AlpacaBroker
+
+    broker = AlpacaBroker.__new__(AlpacaBroker)  # skip real client construction
+    broker.client = SimpleNamespace(get_account=lambda: SimpleNamespace(**fields))
+    return broker
+
+
+def test_alpaca_buying_power_excludes_margin():
+    broker = _alpaca_with_account(equity="100000", last_equity="100000", buying_power="400000", cash="100000")
+    assert broker.get_account().buying_power == 100_000
+
+
+def test_alpaca_buying_power_never_negative_when_cash_borrowed():
+    broker = _alpaca_with_account(equity="100000", last_equity="100000", buying_power="250000", cash="-5000")
+    assert broker.get_account().buying_power == 0

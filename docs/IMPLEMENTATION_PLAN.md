@@ -18,24 +18,33 @@ Last updated: 2026-10-16.
   `bot/broker.py` Alpaca + in-memory SimBroker, `bot/data.py` Alpaca market
   data/news, `bot/ai_filter.py` Groq news veto, `bot/dashboard.py`,
   `bot/journal.py`, `bot/backtest.py`, `bot/config.py`, `bot/__main__.py` CLI.
-* 60 unit tests, all passing (`pytest`). No network needed for them.
+* 62 unit tests, all passing (`pytest`). No network needed for them.
 * The strategy: long-only SMA 20/50 crossover on daily bars, only above SMA
   200, skip if ATR > 4% of price, stop = close − 2×ATR, exit on SMA20 < SMA50
   or stop. Default symbol SPY.
 
-**What has been verified:**
+**What has been verified** (2026-10-16, all plan steps run with real keys):
 
 | Item | Status | Evidence |
 |---|---|---|
-| Unit tests (signals, risk, stop-loss, daily limit, config, AI fail-safe) | ✅ 60/60 pass | `pytest` |
-| Backtest code path | ✅ | Ran on synthetic CSV data only |
-| Groq API (real call) | ✅ works | `GROQ_API_KEY` is set in the cloud environment. A real call allowed on normal headlines and vetoed on a "trading halted" headline, ignoring a planted "IGNORE PREVIOUS INSTRUCTIONS" line. |
-| Alpaca client construction / order request shape | ✅ | `MarketOrderRequest` with OTO stop-loss validates; client targets the paper endpoint |
-| **Alpaca with real keys** | ❌ **not yet verified** | Keys were **not** visible in the previous session: `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` unset, and unauthenticated requests to `paper-api.alpaca.markets` and `data.alpaca.markets` returned HTTP 401. |
+| Unit tests | ✅ 62/62 pass | `pytest` |
+| Groq API | ✅ works | Real calls: allow on normal headlines, veto on a "trading halted" headline. |
+| Alpaca paper account | ✅ works | `python -m bot status`: $100,000 equity, PAPER mode, no positions. |
+| Alpaca market data + news | ✅ works | 293 daily SPY bars (needs 202), latest price, 10 headlines; signal computed (HOLD, no fresh crossover). |
+| Real backtest, SPY 5y (2021-10-18 → 2026-10-15) | ✅ runs | $100k: **+2.46%** vs buy & hold +73.83%, max drawdown −1.05%, 7 closed trades (29% wins) + 1 open. |
+| Paper cycle with AI on | ✅ partial | Ran after the close: "Market is closed; nothing to do." **Still to do: one run during market hours.** |
 
-**Why Alpaca wasn't verified:** environment variables only reach a *new*
-session, and the variables must use these exact names:
-`ALPACA_API_KEY`, `ALPACA_SECRET_KEY` (paper keys).
+**Fixed during verification:** Alpaca reports `buying_power` including margin
+($400k on $100k equity). `AlpacaBroker.get_account` now caps it at actual cash,
+so the bot can never borrow (tests in `tests/test_risk.py`).
+
+**Honest read of the backtest:** the risk caps (≤10% of equity per position,
+≤1% risk per trade) keep the bot mostly in cash, so it gave up nearly all of
+the bull market's gain in exchange for a tiny drawdown. Changing that is a
+risk/return decision for the user, not a bug. Don't tune parameters to the
+backtest.
+
+**Remaining:** run Step 5 once during US market hours.
 
 ---
 
@@ -74,7 +83,7 @@ done
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-pytest -q            # expect 60 passed
+pytest -q            # expect 62 passed
 ```
 
 No `.env` file is needed: `bot/config.py` reads the process environment, and
