@@ -61,6 +61,17 @@ def test_signals_journal_and_backtest(dash):
         dash.backtest("TSLA", 5, 10_000)  # only configured symbols
 
 
+def test_scorecard_uses_account_history_and_live_equity(dash):
+    first_day = str(dash.data.bars.index[-3].date())
+    dash.broker.equity_history = lambda: [(first_day, 40_000.0), ("2999-01-01", 1.0)]  # future rows are dropped
+    dash.broker.filled_orders_since = lambda start: {"buy": 1, "sell": 0}
+    r = dash.scorecard()
+    assert r["start_date"] == first_day and r["start_equity"] == 40_000.0
+    assert r["equity"] == dash.broker.get_account().equity  # today's point is live
+    assert r["trades"] == {"buy": 1, "sell": 0} and r["benchmark"] == "SPY"
+    assert len(r["curve"]) == 2
+
+
 def test_kill_switch_toggles_the_file(dash):
     assert dash.set_kill_switch(True) == {"kill_switch": True}
     assert dash.cfg.kill_switch_file.exists() and dash.status()["kill_switch"]

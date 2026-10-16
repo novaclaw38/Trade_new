@@ -193,6 +193,10 @@ Tell the user, per step, what passed and what didn't, with the actual output
 5. ✅ **Local web dashboard** (done 2026-10-16): `python -m bot web`
    (`bot/web.py`, `bot/web_page.html`). Read-only plus the kill switch;
    localhost only, Host-header check, custom header required for writes.
+6. ✅ **Paper-trading scorecard** (done 2026-10-16): top of the dashboard
+   (`bot/scorecard.py`, `/api/scorecard`). Account equity from Alpaca's
+   portfolio history vs the same starting money in `BENCHMARK_SYMBOL` (SPY),
+   with both worst drops and days toward the 90-day paper period.
 
 ## 5. Known gotchas
 

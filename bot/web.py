@@ -98,6 +98,33 @@ class Dashboard:
         r["trades"] = [{**t, "exit_time": str(t["exit_time"])[:10]} for t in r["trades"]]
         return r
 
+    def scorecard(self) -> dict:
+        from zoneinfo import ZoneInfo
+
+        from bot.scorecard import compute
+
+        symbol = self.cfg.benchmark_symbol
+        today = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+        history = self.broker.equity_history()
+        if not history:
+            raise ValueError("The account has no history yet.")
+        # Alpaca's history ends at the last close; add today's live equity.
+        equity = self.broker.get_account().equity
+        history = [h for h in history if h[0] < today] + [(today, equity)]
+
+        start = datetime.fromisoformat(history[0][0]).replace(tzinfo=timezone.utc)
+        bars = self.data.get_bars(symbol, start=start - timedelta(days=10))
+        closes = [(str(t.date()), float(c)) for t, c in zip(bars.index, bars["close"])]
+        try:
+            closes = [c for c in closes if c[0] < today] + [(today, self.data.latest_price(symbol))]
+        except Exception as e:  # noqa: BLE001 - fall back to the last close
+            log.info("scorecard: no live %s price (%s); using the last close", symbol, e)
+
+        result = compute(history, closes, symbol, today)
+        result["trades"] = self.broker.filled_orders_since(history[0][0])
+        result["mode"] = self.cfg.trading_mode
+        return result
+
     def set_kill_switch(self, on: bool) -> dict:
         path = self.cfg.kill_switch_file
         if on:
@@ -152,6 +179,8 @@ def make_handler(dash: Dashboard, port: int):
                 self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
             elif url.path == "/api/status":
                 self._call(dash.status)
+            elif url.path == "/api/scorecard":
+                self._call(dash.scorecard)
             elif url.path == "/api/signals":
                 self._call(dash.signals)
             elif url.path == "/api/journal":

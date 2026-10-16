@@ -75,6 +75,34 @@ class AlpacaBroker:
             for p in self.client.get_all_positions()
         }
 
+    def equity_history(self) -> list[tuple[str, float]]:
+        """Daily (UTC date, equity) for the account's whole life, oldest first."""
+        from datetime import datetime, timezone
+
+        from alpaca.trading.requests import GetPortfolioHistoryRequest
+
+        h = self.client.get_portfolio_history(GetPortfolioHistoryRequest(period="all", timeframe="1D"))
+        return [
+            (datetime.fromtimestamp(ts, timezone.utc).date().isoformat(), float(eq))
+            for ts, eq in zip(h.timestamp, h.equity)
+            if eq  # days before the account existed come back as 0
+        ]
+
+    def filled_orders_since(self, start: str) -> dict[str, int]:
+        """How many buy and sell orders filled since `start` (YYYY-MM-DD)."""
+        from datetime import datetime, timezone
+
+        from alpaca.trading.enums import QueryOrderStatus
+        from alpaca.trading.requests import GetOrdersRequest
+
+        after = datetime.fromisoformat(start).replace(tzinfo=timezone.utc)
+        orders = self.client.get_orders(GetOrdersRequest(status=QueryOrderStatus.CLOSED, after=after, limit=500))
+        counts = {"buy": 0, "sell": 0}
+        for o in orders:
+            if o.filled_at is not None and o.side.value in counts:
+                counts[o.side.value] += 1
+        return counts
+
     def _open_orders(self, symbol: str):
         from alpaca.trading.enums import QueryOrderStatus
         from alpaca.trading.requests import GetOrdersRequest

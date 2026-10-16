@@ -116,7 +116,11 @@ python -m bot web             # then open http://127.0.0.1:8765
 ```
 
 A local page with the account, positions, live signals, the activity journal
-and a backtest with an equity chart. It refreshes every 30 seconds. It never
+and a backtest with an equity chart. At the top, a **scorecard** compares the
+account's real equity since it started with what the same money would be
+worth in SPY (set `BENCHMARK_SYMBOL` to change it), alongside the worst drop of
+each and progress toward 90 days of paper trading. It reads the account
+history from Alpaca, so it includes runs made in the cloud. It refreshes every 30 seconds. It never
 places or closes orders. Its only control is the kill switch button, which can
 only stop new trades. It listens on your own machine (127.0.0.1) only. Run it
 in a second terminal next to `python -m bot run --loop`.

@@ -131,6 +131,9 @@ tr:last-child td { border-bottom: none; }
 .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); white-space: nowrap; display: none; font-variant-numeric: tabular-nums; }
 .tip .row { display: flex; align-items: center; gap: 6px; }
 .err { color: var(--bad); font-size: 13px; margin-top: 8px; }
+.verdict { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+.meter { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; margin: 6px 0 4px; max-width: 360px; }
+.meter > div { height: 100%; background: var(--accent); border-radius: 3px; }
 .disclaimer { font-size: 12px; color: var(--muted); margin-top: 24px; }
 </style>
 </head>
@@ -151,6 +154,11 @@ tr:last-child td { border-bottom: none; }
     <div class="card kpi"><div class="label">Today's P&amp;L</div><div class="value" id="k-day">–</div><div class="sub" id="k-day-pct"></div></div>
     <div class="card kpi"><div class="label">P&amp;L since start</div><div class="value" id="k-total">–</div><div class="sub" id="k-total-pct"></div></div>
     <div class="card kpi"><div class="label">Cash available</div><div class="value" id="k-cash">–</div><div class="sub muted">No margin is ever used</div></div>
+  </section>
+
+  <section class="card" style="margin-bottom:12px" aria-labelledby="sc-title">
+    <div class="card-head"><h2 id="sc-title">Scorecard: bot vs. just holding the index</h2><span class="muted" id="sc-since" style="font-size:12px"></span></div>
+    <div id="sc-out"><div class="empty">Loading…</div></div>
   </section>
 
   <section class="grid two">
@@ -374,7 +382,7 @@ function niceTicks(lo, hi, n) {
   const ticks = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) ticks.push(v);
   return ticks;
 }
-function drawChart(box, curve) {
+function drawChart(box, curve, names = ["Strategy", "Buy & hold"]) {
   const W = box.clientWidth || 800, H = 280, m = { t: 10, r: 96, b: 26, l: 64 };
   const xs = curve.map((c) => new Date(c[0]).getTime());
   const all = curve.flatMap((c) => [c[1], c[2]]);
@@ -386,12 +394,23 @@ function drawChart(box, curve) {
     s.append(svg("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: "var(--grid)", "stroke-width": 1 }));
     const t = svg("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end", "font-size": 11, fill: "var(--muted)" }); t.textContent = "$" + Math.round(v).toLocaleString(); s.append(t);
   }
-  const y0 = new Date(xs[0]).getFullYear(), y1 = new Date(xs[xs.length - 1]).getFullYear();
-  for (let yr = y0 + 1; yr <= y1; yr++) {
-    const tx = x(new Date(yr, 0, 1).getTime());
-    const t = svg("text", { x: tx, y: H - 6, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }); t.textContent = yr; s.append(t);
+  // x labels: years for long periods, months (thinned to ~6) for short ones
+  const d0 = new Date(xs[0]), d1 = new Date(xs[xs.length - 1]);
+  const months = (d1.getFullYear() - d0.getFullYear()) * 12 + d1.getMonth() - d0.getMonth();
+  const marks = [];
+  if (months >= 24) {
+    for (let yr = d0.getFullYear() + 1; yr <= d1.getFullYear(); yr++) marks.push([new Date(yr, 0, 1), String(yr)]);
+  } else {
+    const step = Math.max(1, Math.ceil(months / 6));
+    for (let k = 1; k <= months; k += step) {
+      const m = new Date(d0.getFullYear(), d0.getMonth() + k, 1);
+      marks.push([m, m.toLocaleDateString(undefined, { month: "short", ...(m.getMonth() === 0 ? { year: "numeric" } : {}) })]);
+    }
   }
-  const series = [[2, "var(--series-2)", "Buy & hold"], [1, "var(--series-1)", "Strategy"]];
+  for (const [when, label] of marks) {
+    const t = svg("text", { x: x(when.getTime()), y: H - 6, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }); t.textContent = label; s.append(t);
+  }
+  const series = [[2, "var(--series-2)", names[1]], [1, "var(--series-1)", names[0]]];
   for (const [i, color, name] of series) {
     s.append(svg("path", { d: curve.map((c, k) => (k ? "L" : "M") + x(xs[k]).toFixed(1) + "," + y(c[i]).toFixed(1)).join(""), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round" }));
     const last = curve[curve.length - 1];
@@ -451,9 +470,57 @@ async function runBacktest() {
 }
 $("bt-run").addEventListener("click", runBacktest);
 
+// ---------- scorecard ----------
+const EARLY_DAYS = 30;
+async function loadScorecard() {
+  const box = $("sc-out");
+  try {
+    const r = await api("/api/scorecard");
+    const sym = r.benchmark, diff = r.difference, pts = (r.bot_return - r.benchmark_return) * 100;
+    $("sc-since").textContent = `Since ${new Date(r.start_date + "T12:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}, starting with ${money(r.start_equity)}`;
+
+    let verdict, verdictCls = "";
+    if (r.days < EARLY_DAYS || r.curve.length < 2) {
+      verdict = `Too early to judge: ${r.days} day${r.days === 1 ? "" : "s"} of ${r.mode} trading so far.`;
+    } else if (diff >= 0) {
+      verdict = `Ahead of ${sym} by ${money(diff)} (${pts.toFixed(2)} points).`; verdictCls = "pos";
+    } else {
+      verdict = `Behind ${sym} by ${money(-diff)} (${pts.toFixed(2)} points).`; verdictCls = "neg";
+    }
+    const stat = (label, value, c = "", sub = null) => el("div", { class: "card kpi" }, el("div", { class: "label", text: label }),
+      el("div", { class: "value " + c, text: value }), sub ? el("div", { class: "sub muted", text: sub }) : null);
+    const tiles = el("div", { class: "grid bt-stats", style: "margin:12px 0" },
+      stat("Bot return", pct(r.bot_return), cls(r.bot_return), money(r.equity)),
+      stat(`${sym} with the same money`, pct(r.benchmark_return), cls(r.benchmark_return), money(r.benchmark_equity)),
+      stat("Difference", signed(diff), cls(diff), `${pts >= 0 ? "+" : ""}${pts.toFixed(2)} percentage points`),
+      stat("Worst drop", (r.bot_max_drawdown * 100).toFixed(2) + "%", r.bot_max_drawdown < 0 ? "neg" : "", `${sym}: ${(r.benchmark_max_drawdown * 100).toFixed(2)}%`));
+
+    const done = Math.min(r.days / r.recommended_days, 1);
+    const progress = el("div", {},
+      el("div", { style: "font-size:13px", text: `Paper trading: ${r.days} of ${r.recommended_days} recommended days before real money` }),
+      el("div", { class: "meter", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(r.recommended_days), "aria-valuenow": String(Math.min(r.days, r.recommended_days)), "aria-label": "Paper trading days" },
+        el("div", { style: `width:${(done * 100).toFixed(1)}%` })),
+      el("div", { class: "note", style: "margin-top:0", text: `Orders filled since the start: ${r.trades.buy} buy, ${r.trades.sell} sell.` }));
+
+    const parts = [el("p", { class: "verdict " + verdictCls, text: verdict }), tiles, progress];
+    if (r.curve.length >= 2) {
+      const chart = el("div", { class: "chart", style: "margin-top:16px" });
+      parts.push(el("div", { class: "legend", style: "margin-top:16px" },
+        el("span", {}, el("span", { class: "swatch", style: "background:var(--series-1)" }), "Bot (account equity)"),
+        el("span", {}, el("span", { class: "swatch", style: "background:var(--series-2)" }), `${sym} with the same money`)), chart);
+      box.replaceChildren(...parts,
+        el("div", { class: "note", text: `The bot keeps most of its money in cash, so in a rising market it usually trails ${sym}. What it offers instead is a smaller worst drop; judge it on both.` }));
+      drawChart(chart, r.curve, ["Bot", sym]);
+    } else {
+      box.replaceChildren(...parts, el("div", { class: "note", text: "A chart of both lines appears after the second trading day." }));
+    }
+  } catch (e) { box.replaceChildren(el("div", { class: "err", text: "Scorecard unavailable: " + e.message })); }
+}
+
 // ---------- boot ----------
-$("refresh").addEventListener("click", () => { loadStatus(); loadFeed(); });
+$("refresh").addEventListener("click", () => { loadStatus(); loadFeed(); loadScorecard(); });
 loadStatus().then(loadSignals);
+loadScorecard();
 loadFeed();
 setInterval(() => { if (!document.hidden) { loadStatus(); loadFeed(); } }, 30000);
 </script>
