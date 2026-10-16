@@ -109,6 +109,15 @@ Example dashboard:
 ========================================================================
 ```
 
+### Scheduled runs on a short-lived machine
+
+`scripts/scheduled_run.sh` runs one cycle on a machine that starts fresh each
+time, such as a scheduled cloud job. The bot's memory (`state.json` and
+`logs/`) is kept on a separate git branch, `bot-data`. The script checks that
+branch out into `.bot-data/`, runs `python -m bot run` with `DATA_DIR` pointing
+there, then commits and pushes the result. To halt new trades between runs, add
+a file named `STOP` to the `bot-data` branch.
+
 ### Stopping the bot
 
 * **Ctrl+C** stops the program. Open positions keep their stop-loss orders
